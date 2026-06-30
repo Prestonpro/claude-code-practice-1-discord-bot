@@ -128,30 +128,35 @@ async function showQuotes(interaction, word, userArg, initialPage) {
       .setDisabled(p >= totalPages),
   );
 
-  const reply = await interaction.editReply({
+  await interaction.editReply({
     embeds: [buildEmbed(currentPage)],
     components: totalPages > 1 ? [buildRow(currentPage)] : [],
   });
 
   if (totalPages <= 1) return;
 
-  const collector = reply.createMessageComponentCollector({ time: COLLECTOR_TIMEOUT });
+  const message   = await interaction.fetchReply();
+  const collector = message.createMessageComponentCollector({ time: COLLECTOR_TIMEOUT });
 
   collector.on('collect', async btn => {
-    if (btn.user.id !== interaction.user.id) {
-      return btn.reply({
-        content: 'Only the person who ran this command can flip pages.',
-        ephemeral: true,
+    try {
+      if (btn.user.id !== interaction.user.id) {
+        return btn.reply({
+          content: 'Only the person who ran this command can flip pages.',
+          ephemeral: true,
+        });
+      }
+
+      if (btn.customId === 'prev') currentPage = Math.max(1, currentPage - 1);
+      if (btn.customId === 'next') currentPage = Math.min(totalPages, currentPage + 1);
+
+      await btn.update({
+        embeds: [buildEmbed(currentPage)],
+        components: [buildRow(currentPage)],
       });
+    } catch (err) {
+      console.error('[gurt] button update failed:', err.message);
     }
-
-    if (btn.customId === 'prev') currentPage = Math.max(1, currentPage - 1);
-    if (btn.customId === 'next') currentPage = Math.min(totalPages, currentPage + 1);
-
-    await btn.update({
-      embeds: [buildEmbed(currentPage)],
-      components: [buildRow(currentPage)],
-    });
   });
 
   collector.on('end', async () => {
