@@ -31,24 +31,22 @@ module.exports = {
     if (word.includes(' ')) {
       return interaction.reply({
         content: 'Please provide a single word (no spaces).',
-        ephemeral: true,
+        flags: 64,
       });
     }
 
     await interaction.deferReply();
 
-    // No user supplied → show server-wide stats
     if (!userArg) {
       return showStats(interaction, word);
     }
 
-    // User supplied → show their quotes
     return showQuotes(interaction, word, userArg.trim(), page);
   },
 };
 
 async function showStats(interaction, word) {
-  const stats = db.getWordStats(interaction.guildId, word);
+  const stats = await db.getWordStats(interaction.guildId, word);
 
   if (stats.length === 0) {
     return interaction.editReply(`No one has said **${word}** yet (or the bot hasn't seen it).`);
@@ -71,7 +69,7 @@ async function showStats(interaction, word) {
 }
 
 async function showQuotes(interaction, word, userArg, page) {
-  const found = db.findUserByName(interaction.guildId, userArg);
+  const found = await db.findUserByName(interaction.guildId, userArg);
 
   if (!found) {
     return interaction.editReply(
@@ -79,7 +77,7 @@ async function showQuotes(interaction, word, userArg, page) {
     );
   }
 
-  const quotes = db.getUserQuotes(interaction.guildId, found.userId, word);
+  const quotes = await db.getUserQuotes(interaction.guildId, found.userId, word);
 
   if (quotes.length === 0) {
     return interaction.editReply(
@@ -92,7 +90,7 @@ async function showQuotes(interaction, word, userArg, page) {
   const slice      = quotes.slice((safePage - 1) * MAX_QUOTES_PER_PAGE, safePage * MAX_QUOTES_PER_PAGE);
 
   const lines = slice.map((q, i) => {
-    const date = new Date(q.timestamp).toLocaleDateString('en-US', {
+    const date = new Date(Number(q.timestamp)).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
     });
     const globalIndex = (safePage - 1) * MAX_QUOTES_PER_PAGE + i + 1;

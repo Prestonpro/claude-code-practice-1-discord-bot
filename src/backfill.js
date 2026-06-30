@@ -1,11 +1,6 @@
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { saveMessage } = require('./database');
 
-/**
- * On startup, walk every readable text channel in every guild and store
- * all historical messages. INSERT OR IGNORE in the DB means re-running
- * is safe — already-stored messages are silently skipped.
- */
 async function backfillAllGuilds(client) {
   for (const [, guild] of client.guilds.cache) {
     await backfillGuild(guild);
@@ -25,7 +20,7 @@ async function backfillGuild(guild) {
     const count = await backfillChannel(channel);
     guildTotal += count;
   }
-  console.log(`[backfill] ${guild.name}: ${guildTotal} messages stored`);
+  console.log(`[backfill] ${guild.name}: ${guildTotal} new messages stored`);
 }
 
 async function backfillChannel(channel) {
@@ -40,7 +35,6 @@ async function backfillChannel(channel) {
     try {
       batch = await channel.messages.fetch(options);
     } catch (err) {
-      // No access or rate-limited — skip this channel
       console.warn(`[backfill] Skipping #${channel.name}: ${err.message}`);
       break;
     }
@@ -51,7 +45,7 @@ async function backfillChannel(channel) {
       if (msg.author.bot) continue;
       if (!msg.content.trim()) continue;
 
-      saveMessage({
+      const inserted = await saveMessage({
         messageId: msg.id,
         guildId:   msg.guild.id,
         channelId: msg.channel.id,
@@ -60,15 +54,12 @@ async function backfillChannel(channel) {
         content:   msg.content,
         timestamp: msg.createdTimestamp,
       });
-      stored++;
+      stored += inserted;
     }
 
     lastId = batch.last().id;
-
-    // Stop paginating when we got a partial batch (reached the beginning)
     if (batch.size < 100) break;
 
-    // Respect Discord's rate limit: ~5 requests/5s per channel
     await sleep(1100);
   }
 
