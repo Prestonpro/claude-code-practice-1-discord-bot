@@ -7,10 +7,10 @@ const { REST, Routes } = require('discord.js');
 const fs   = require('fs');
 const path = require('path');
 
-const { DISCORD_TOKEN, CLIENT_ID, GUILD_ID } = process.env;
+const { DISCORD_TOKEN, CLIENT_ID } = process.env;
 
-if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.error('DISCORD_TOKEN, CLIENT_ID, and GUILD_ID must all be set in .env');
+if (!DISCORD_TOKEN || !CLIENT_ID) {
+  console.error('DISCORD_TOKEN and CLIENT_ID must be set in .env');
   process.exit(1);
 }
 
@@ -27,10 +27,10 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
   try {
     console.log(`Registering ${commands.length} slash command(s)...`);
     await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      Routes.applicationCommands(CLIENT_ID),
       { body: commands },
     );
-    console.log('Done! Commands registered to guild.');
+    console.log('Done! Global commands registered (may take up to 1 hour to appear in all servers).');
   } catch (err) {
     console.error(err);
   }
