@@ -1,13 +1,24 @@
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
-const { saveMessage } = require('./database');
+const { bulkSaveMessages } = require('./database');
 
+/**
+ * Collect all Discord history into memory first, then upload to Turso in bulk.
+ * This minimises round-trips: many Discord fetches (rate-limited anyway),
+ * then one fast batch upload instead of one DB call per message.
+ */
 async function backfillAllGuilds(client) {
+  const allMessages = [];
+
   for (const [, guild] of client.guilds.cache) {
-    await backfillGuild(guild);
+    await collectGuildMessages(guild, allMessages);
   }
+
+  console.log(`[backfill] Fetched ${allMessages.length} messages from Discord. Uploading to database...`);
+  const inserted = await bulkSaveMessages(allMessages);
+  console.log(`[backfill] Done. ${inserted} new messages stored.`);
 }
 
-async function backfillGuild(guild) {
+async function collectGuildMessages(guild, out) {
   const textChannels = guild.channels.cache.filter(ch => {
     if (ch.type !== ChannelType.GuildText) return false;
     if (!ch.viewable) return false;
@@ -15,17 +26,14 @@ async function backfillGuild(guild) {
     return perms && perms.has(PermissionFlagsBits.ReadMessageHistory);
   });
 
-  let guildTotal = 0;
   for (const [, channel] of textChannels) {
-    const count = await backfillChannel(channel);
-    guildTotal += count;
+    await collectChannelMessages(channel, out);
   }
-  console.log(`[backfill] ${guild.name}: ${guildTotal} new messages stored`);
 }
 
-async function backfillChannel(channel) {
-  let stored = 0;
-  let lastId  = null;
+async function collectChannelMessages(channel, out) {
+  let lastId = null;
+  let fetched = 0;
 
   while (true) {
     const options = { limit: 100 };
@@ -44,8 +52,7 @@ async function backfillChannel(channel) {
     for (const [, msg] of batch) {
       if (msg.author.bot) continue;
       if (!msg.content.trim()) continue;
-
-      const inserted = await saveMessage({
+      out.push({
         messageId: msg.id,
         guildId:   msg.guild.id,
         channelId: msg.channel.id,
@@ -54,7 +61,7 @@ async function backfillChannel(channel) {
         content:   msg.content,
         timestamp: msg.createdTimestamp,
       });
-      stored += inserted;
+      fetched++;
     }
 
     lastId = batch.last().id;
@@ -63,7 +70,7 @@ async function backfillChannel(channel) {
     await sleep(1100);
   }
 
-  return stored;
+  if (fetched > 0) console.log(`[backfill] #${channel.name}: ${fetched} messages collected`);
 }
 
 function sleep(ms) {

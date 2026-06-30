@@ -5,6 +5,8 @@ const { createClient } = require('@libsql/client');
 const url       = process.env.TURSO_URL       || 'file:wordstats.db';
 const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
 
+console.log(`[db] Using: ${url} | persistent=${url.startsWith('libsql://')}`);
+
 const db = createClient({ url, authToken });
 
 async function initSchema() {
@@ -106,4 +108,35 @@ async function findUserByName(guildId, username) {
   return result.rows[0] || null;
 }
 
-module.exports = { initSchema, saveMessage, getWordStats, getUserQuotes, findUserByName };
+/**
+ * Insert many messages at once using batched requests (500 per round-trip).
+ * Much faster than saveMessage() in a loop when uploading large history.
+ * Returns total number of newly inserted rows.
+ */
+async function bulkSaveMessages(messages) {
+  const CHUNK = 500;
+  let inserted = 0;
+  for (let i = 0; i < messages.length; i += CHUNK) {
+    const chunk = messages.slice(i, i + CHUNK);
+    const statements = chunk.map(m => ({
+      sql: `INSERT OR IGNORE INTO messages
+            (message_id, guild_id, channel_id, user_id, username, content, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [m.messageId ?? null, m.guildId, m.channelId, m.userId, m.username, normalize(m.content), m.timestamp],
+    }));
+    const results = await db.batch(statements, 'write');
+    inserted += results.reduce((sum, r) => sum + r.rowsAffected, 0);
+    console.log(`[backfill] Uploaded ${Math.min(i + CHUNK, messages.length)}/${messages.length} messages...`);
+  }
+  return inserted;
+}
+
+async function getMessageCount(guildId) {
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS total FROM messages WHERE guild_id = ?`,
+    args: [guildId],
+  });
+  return Number(result.rows[0].total);
+}
+
+module.exports = { initSchema, saveMessage, bulkSaveMessages, getWordStats, getUserQuotes, findUserByName, getMessageCount };
