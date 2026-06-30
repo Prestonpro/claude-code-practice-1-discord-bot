@@ -12,8 +12,8 @@ A Discord bot that passively listens to every message in a server and lets you q
 **Slash commands:**
 | Command | What it does |
 |---------|-------------|
-| `/wordstats word:<word>` | Shows how many times each server member said the word |
-| `/quotes word:<word> user:<name> [page:<n>]` | Quotes every message where that user said the word, paginated |
+| `/gurt <word>` | Shows how many times each server member said the word |
+| `/gurt <word> <user> [page:<n>]` | Quotes every message where that user said the word, paginated |
 
 **Tech stack:** Node.js · discord.js v14 · better-sqlite3 · dotenv
 
@@ -50,8 +50,20 @@ A Discord bot that passively listens to every message in a server and lets you q
 
 **Known limitations / future work:**
 - [ ] Add a `/topwords` command showing the most-used words server-wide or per user
-- [ ] Add a `/mystats` shortcut (no user argument needed)
 - [ ] Backfill historical messages by reading channel history on startup (requires MANAGE_MESSAGES or reading channel history)
 - [ ] Add FTS5 for faster word search on large servers
-- [ ] Add per-channel filtering option to `/wordstats`
+- [ ] Add per-channel filtering option to `/gurt`
 - [ ] Deploy to a VPS / Railway / Fly.io so the bot runs 24/7
+
+---
+
+### 2026-06-30 — Consolidated commands into /gurt
+
+**What changed:**
+- Deleted `src/commands/wordstats.js` and `src/commands/quotes.js`
+- Created `src/commands/gurt.js` — single `/gurt` command that handles both modes:
+  - `/gurt <word>` → server-wide stats embed (same as old `/wordstats`)
+  - `/gurt <word> <user>` → user quotes embed (same as old `/quotes`)
+  - `/gurt <word> <user> page:<n>` → paginated quotes
+
+**Why:** Cleaner UX — one command name to remember, `user` is optional so it naturally falls back to stats mode.
