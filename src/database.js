@@ -1,7 +1,8 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'wordstats.db');
+// On Railway: set DB_PATH env var to your volume mount path e.g. /data/wordstats.db
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'wordstats.db');
 
 let db;
 
@@ -38,14 +39,28 @@ function initSchema() {
 }
 
 /**
+ * Strip punctuation and collapse whitespace so LIKE word matching is reliable.
+ * "pizza!" → "pizza"   "hello, world" → "hello  world"
+ */
+function normalize(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Persist a message. INSERT OR IGNORE means duplicate message_ids are silently skipped,
  * so backfill and the live listener can both call this safely.
+ * Returns 1 if inserted, 0 if it was a duplicate.
  */
 function saveMessage({ messageId, guildId, channelId, userId, username, content, timestamp }) {
-  getDb().prepare(`
+  const result = getDb().prepare(`
     INSERT OR IGNORE INTO messages (message_id, guild_id, channel_id, user_id, username, content, timestamp)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(messageId ?? null, guildId, channelId, userId, username, content.toLowerCase(), timestamp);
+  `).run(messageId ?? null, guildId, channelId, userId, username, normalize(content), timestamp);
+  return result.changes;
 }
 
 /**
@@ -53,24 +68,15 @@ function saveMessage({ messageId, guildId, channelId, userId, username, content,
  * { userId, username, count }[]  sorted by count desc
  */
 function getWordStats(guildId, word) {
-  const pattern      = `% ${word} %`;
-  const patternStart = `${word} %`;
-  const patternEnd   = `% ${word}`;
-  const exact        = word;
-
+  const w = normalize(word);
   return getDb().prepare(`
     SELECT user_id AS userId, username, COUNT(*) AS count
     FROM messages
     WHERE guild_id = ?
-      AND (
-        content LIKE ?
-        OR content LIKE ?
-        OR content LIKE ?
-        OR content = ?
-      )
+      AND (' ' || content || ' ') LIKE (? || ' ' || ? || ' ' || ?)
     GROUP BY user_id
     ORDER BY count DESC
-  `).all(guildId, pattern, patternStart, patternEnd, exact);
+  `).all(guildId, '%', w, '%');
 }
 
 /**
@@ -78,24 +84,15 @@ function getWordStats(guildId, word) {
  * { content, timestamp, channelId }[]  sorted oldest first
  */
 function getUserQuotes(guildId, userId, word) {
-  const pattern      = `% ${word} %`;
-  const patternStart = `${word} %`;
-  const patternEnd   = `% ${word}`;
-  const exact        = word;
-
+  const w = normalize(word);
   return getDb().prepare(`
     SELECT content, timestamp, channel_id AS channelId
     FROM messages
     WHERE guild_id = ?
       AND user_id = ?
-      AND (
-        content LIKE ?
-        OR content LIKE ?
-        OR content LIKE ?
-        OR content = ?
-      )
+      AND (' ' || content || ' ') LIKE (? || ' ' || ? || ' ' || ?)
     ORDER BY timestamp ASC
-  `).all(guildId, userId, pattern, patternStart, patternEnd, exact);
+  `).all(guildId, userId, '%', w, '%');
 }
 
 /**

@@ -5,7 +5,7 @@ const path = require('path');
 const { attachMessageListener } = require('./messageListener');
 const { backfillAllGuilds }    = require('./backfill');
 
-const REQUIRED_ENV = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID'];
+const REQUIRED_ENV = ['DISCORD_TOKEN', 'CLIENT_ID'];
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     console.error(`Missing required env var: ${key}`);
@@ -20,6 +20,9 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
+
+// Prevent unhandled client errors from crashing the process
+client.on('error', err => console.error('[client error]', err));
 
 // Load slash commands from ./commands/
 client.commands = new Collection();
@@ -39,12 +42,16 @@ client.on('interactionCreate', async interaction => {
   try {
     await command.execute(interaction);
   } catch (err) {
-    console.error(`Error in /${interaction.commandName}:`, err);
-    const reply = { content: 'Something went wrong running that command.', ephemeral: true };
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(reply);
-    } else {
-      await interaction.reply(reply);
+    console.error(`Error in /${interaction.commandName}:`, err.message);
+    try {
+      const reply = { content: 'Something went wrong running that command.', flags: 64 };
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(reply);
+      } else {
+        await interaction.reply(reply);
+      }
+    } catch {
+      // Interaction already expired — nothing to do
     }
   }
 });

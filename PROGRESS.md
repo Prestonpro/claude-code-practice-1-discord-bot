@@ -80,3 +80,22 @@ A Discord bot that passively listens to every message in a server and lets you q
 - Updated `src/index.js` to call `backfillAllGuilds()` after login and fixed the `ready` → `clientReady` deprecation warning
 
 **How it works:** Discord's API lets bots fetch up to 100 messages at a time per channel using a `before` cursor. The backfill loops until it gets a partial batch (meaning it hit the beginning of the channel). Already-seen messages are skipped by the `UNIQUE` constraint, so restarting the bot never double-counts.
+
+---
+
+### 2026-06-30 — Railway deployment + word count fix
+
+**What changed:**
+- Fixed word count bug: LIKE patterns were missing words followed by punctuation (e.g. "pizza!" or "pizza,"). Added a `normalize()` function that strips punctuation and collapses whitespace before storing messages. Padding the stored content with spaces via `(' ' || content || ' ') LIKE '%' || word || '%'` now reliably matches any word regardless of surrounding punctuation.
+- Added `DB_PATH` env var support in `src/database.js` — set this to your Railway volume mount path (e.g. `/data/wordstats.db`) so the database persists across deployments. Falls back to local `wordstats.db` when not set.
+- Added `railway.toml` for Railway build/deploy configuration.
+- Added `engines` field to `package.json` to pin Node.js ≥ 18.
+- Removed `GUILD_ID` from required startup env vars (only needed for guild-specific command deploy, which we no longer use).
+- Fixed crash when an interaction expired before the bot could respond — error handler now catches that secondary failure silently instead of crashing the process.
+- Added `client.on('error', ...)` to prevent unhandled Discord client errors from killing the process.
+
+**Railway setup:**
+1. In Railway dashboard, add a Volume to the service mounted at `/data`
+2. Set env vars: `DISCORD_TOKEN`, `CLIENT_ID`
+3. Set `DB_PATH=/data/wordstats.db`
+4. Deploy — the database will persist across restarts and redeployments
