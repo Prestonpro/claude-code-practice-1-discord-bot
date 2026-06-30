@@ -57,13 +57,17 @@ async function saveMessage({ messageId, guildId, channelId, userId, username, co
 async function getWordStats(guildId, word) {
   const w = normalize(word);
   const result = await db.execute({
-    sql: `SELECT user_id AS userId, username, COUNT(*) AS count
+    sql: `SELECT user_id AS userId, username,
+            SUM(
+              (LENGTH(' ' || content || ' ') - LENGTH(REPLACE(' ' || content || ' ', ' ' || ? || ' ', '')))
+              / LENGTH(' ' || ? || ' ')
+            ) AS count
           FROM messages
           WHERE guild_id = ?
             AND (' ' || content || ' ') LIKE ('%' || ' ' || ? || ' ' || '%')
           GROUP BY user_id
           ORDER BY count DESC`,
-    args: [guildId, w],
+    args: [w, w, guildId, w],
   });
   return result.rows;
 }
