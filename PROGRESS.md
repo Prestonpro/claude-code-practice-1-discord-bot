@@ -50,7 +50,7 @@ A Discord bot that passively listens to every message in a server and lets you q
 
 **Known limitations / future work:**
 - [ ] Add a `/topwords` command showing the most-used words server-wide or per user
-- [ ] Backfill historical messages by reading channel history on startup (requires MANAGE_MESSAGES or reading channel history)
+- [x] Backfill historical messages on startup
 - [ ] Add FTS5 for faster word search on large servers
 - [ ] Add per-channel filtering option to `/gurt`
 - [ ] Deploy to a VPS / Railway / Fly.io so the bot runs 24/7
@@ -67,3 +67,16 @@ A Discord bot that passively listens to every message in a server and lets you q
   - `/gurt <word> <user> page:<n>` → paginated quotes
 
 **Why:** Cleaner UX — one command name to remember, `user` is optional so it naturally falls back to stats mode.
+
+---
+
+### 2026-06-30 — Historical message backfill
+
+**What changed:**
+- Added `message_id TEXT UNIQUE` column to the `messages` table; `INSERT OR IGNORE` now deduplicates on that ID so backfill and the live listener can both run without creating duplicates
+- Added migration in `initSchema()` so existing databases get the new column without needing to be recreated
+- Created `src/backfill.js` — on every startup, walks every readable text channel in every guild and pages through all history (100 messages per request, ~1 second between requests to respect Discord rate limits)
+- Updated `src/messageListener.js` to pass `message.id` to `saveMessage`
+- Updated `src/index.js` to call `backfillAllGuilds()` after login and fixed the `ready` → `clientReady` deprecation warning
+
+**How it works:** Discord's API lets bots fetch up to 100 messages at a time per channel using a `before` cursor. The backfill loops until it gets a partial batch (meaning it hit the beginning of the channel). Already-seen messages are skipped by the `UNIQUE` constraint, so restarting the bot never double-counts.

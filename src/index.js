@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs   = require('fs');
 const path = require('path');
 const { attachMessageListener } = require('./messageListener');
+const { backfillAllGuilds }    = require('./backfill');
 
 const REQUIRED_ENV = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID'];
 for (const key of REQUIRED_ENV) {
@@ -51,9 +52,12 @@ client.on('interactionCreate', async interaction => {
 // Passive message tracking
 attachMessageListener(client);
 
-client.once('ready', () => {
+client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Tracking messages in: ${client.guilds.cache.map(g => g.name).join(', ')}`);
+  console.log('[backfill] Starting historical message backfill...');
+  await backfillAllGuilds(client);
+  console.log('[backfill] Done.');
 });
 
 client.login(process.env.DISCORD_TOKEN);

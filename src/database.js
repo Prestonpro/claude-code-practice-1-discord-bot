@@ -18,6 +18,7 @@ function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id  TEXT UNIQUE,
       guild_id    TEXT NOT NULL,
       channel_id  TEXT NOT NULL,
       user_id     TEXT NOT NULL,
@@ -29,17 +30,22 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_guild ON messages(guild_id);
     CREATE INDEX IF NOT EXISTS idx_user  ON messages(guild_id, user_id);
   `);
+
+  // Migration for databases created before message_id was added
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN message_id TEXT`);
+  } catch (_) { /* column already exists */ }
 }
 
 /**
- * Persist a message so its words can be queried later.
+ * Persist a message. INSERT OR IGNORE means duplicate message_ids are silently skipped,
+ * so backfill and the live listener can both call this safely.
  */
-function saveMessage({ guildId, channelId, userId, username, content, timestamp }) {
-  const stmt = getDb().prepare(`
-    INSERT INTO messages (guild_id, channel_id, user_id, username, content, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  stmt.run(guildId, channelId, userId, username, content.toLowerCase(), timestamp);
+function saveMessage({ messageId, guildId, channelId, userId, username, content, timestamp }) {
+  getDb().prepare(`
+    INSERT OR IGNORE INTO messages (message_id, guild_id, channel_id, user_id, username, content, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(messageId ?? null, guildId, channelId, userId, username, content.toLowerCase(), timestamp);
 }
 
 /**
@@ -47,12 +53,12 @@ function saveMessage({ guildId, channelId, userId, username, content, timestamp 
  * { userId, username, count }[]  sorted by count desc
  */
 function getWordStats(guildId, word) {
-  const pattern = `% ${word} %`;
+  const pattern      = `% ${word} %`;
   const patternStart = `${word} %`;
-  const patternEnd = `% ${word}`;
-  const exact = word;
+  const patternEnd   = `% ${word}`;
+  const exact        = word;
 
-  const rows = getDb().prepare(`
+  return getDb().prepare(`
     SELECT user_id AS userId, username, COUNT(*) AS count
     FROM messages
     WHERE guild_id = ?
@@ -65,8 +71,6 @@ function getWordStats(guildId, word) {
     GROUP BY user_id
     ORDER BY count DESC
   `).all(guildId, pattern, patternStart, patternEnd, exact);
-
-  return rows;
 }
 
 /**
@@ -74,12 +78,12 @@ function getWordStats(guildId, word) {
  * { content, timestamp, channelId }[]  sorted oldest first
  */
 function getUserQuotes(guildId, userId, word) {
-  const pattern = `% ${word} %`;
+  const pattern      = `% ${word} %`;
   const patternStart = `${word} %`;
-  const patternEnd = `% ${word}`;
-  const exact = word;
+  const patternEnd   = `% ${word}`;
+  const exact        = word;
 
-  const rows = getDb().prepare(`
+  return getDb().prepare(`
     SELECT content, timestamp, channel_id AS channelId
     FROM messages
     WHERE guild_id = ?
@@ -92,8 +96,6 @@ function getUserQuotes(guildId, userId, word) {
       )
     ORDER BY timestamp ASC
   `).all(guildId, userId, pattern, patternStart, patternEnd, exact);
-
-  return rows;
 }
 
 /**
@@ -101,15 +103,13 @@ function getUserQuotes(guildId, userId, word) {
  * Returns null if not found.
  */
 function findUserByName(guildId, username) {
-  const row = getDb().prepare(`
+  return getDb().prepare(`
     SELECT user_id AS userId, username
     FROM messages
     WHERE guild_id = ?
       AND LOWER(username) LIKE LOWER(?)
     LIMIT 1
-  `).get(guildId, username);
-
-  return row || null;
+  `).get(guildId, username) || null;
 }
 
 module.exports = { saveMessage, getWordStats, getUserQuotes, findUserByName };
