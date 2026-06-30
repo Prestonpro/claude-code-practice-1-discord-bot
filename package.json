@@ -1,0 +1,27 @@
+{
+  "name": "claude-code-practice-1-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that tracks word usage stats per user and can quote every time someone said a word",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prestonpro/claude-code-practice-1-discord-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Prestonpro/claude-code-practice-1-discord-bot/issues"
+  },
+  "homepage": "https://github.com/Prestonpro/claude-code-practice-1-discord-bot#readme",
+  "dependencies": {
+    "@discordjs/builders": "^1.14.1",
+    "better-sqlite3": "^12.11.1",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2"
+  }
+}
