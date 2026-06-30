@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const { attachMessageListener } = require('./messageListener');
 const { backfillAllGuilds }    = require('./backfill');
-const { initSchema }           = require('./database');
+const { initSchema, getMessageCount } = require('./database');
 
 const REQUIRED_ENV = ['DISCORD_TOKEN', 'CLIENT_ID'];
 for (const key of REQUIRED_ENV) {
@@ -64,9 +64,20 @@ client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
   console.log(`Tracking messages in: ${client.guilds.cache.map(g => g.name).join(', ')}`);
   await initSchema();
+
+  for (const [, guild] of client.guilds.cache) {
+    const count = await getMessageCount(guild.id);
+    console.log(`[db] ${guild.name}: ${count} messages already stored`);
+  }
+
   console.log('[backfill] Starting historical message backfill...');
   await backfillAllGuilds(client);
   console.log('[backfill] Done.');
+
+  for (const [, guild] of client.guilds.cache) {
+    const count = await getMessageCount(guild.id);
+    console.log(`[db] ${guild.name}: ${count} messages total after backfill`);
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
