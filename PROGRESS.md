@@ -15,7 +15,7 @@ A Discord bot that passively listens to every message in a server and lets you q
 | `/gurt <word>` | Shows how many times each server member said the word |
 | `/gurt <word> <user> [page:<n>]` | Quotes every message where that user said the word, paginated |
 
-**Tech stack:** Node.js · discord.js v14 · better-sqlite3 · dotenv
+**Tech stack:** Node.js · discord.js v14 · @libsql/client (Turso) · dotenv
 
 ---
 
@@ -99,3 +99,33 @@ A Discord bot that passively listens to every message in a server and lets you q
 2. Set env vars: `DISCORD_TOKEN`, `CLIENT_ID`
 3. Set `DB_PATH=/data/wordstats.db`
 4. Deploy — the database will persist across restarts and redeployments
+
+---
+
+### 2026-06-30 — Switched to Turso (libSQL) for persistent cloud database
+
+**What changed:**
+- Replaced `better-sqlite3` (local file only) with `@libsql/client` (Turso)
+- Database is now a hosted Turso cloud database — persists across Railway redeploys without needing a volume
+- Added `bulkSaveMessages()` in `src/database.js` — batches 500 messages per round-trip to Turso instead of one DB call per message; dramatically speeds up backfill on large servers
+- Updated `src/backfill.js` to collect all Discord messages in memory first, then upload in bulk
+
+**Turso setup (Railway env vars needed):**
+- `TURSO_URL` — your Turso database URL (`libsql://your-db.turso.io`)
+- `TURSO_AUTH_TOKEN` — your Turso auth token
+
+**If `TURSO_URL` is not set**, the bot falls back to `file:wordstats.db` (local SQLite). This works locally but data is lost on every Railway redeploy.
+
+---
+
+### 2026-06-30 — Word count fix + startup diagnostics
+
+**What changed:**
+- Fixed word count being too low: `COUNT(*)` was counting messages that contain the word (each message = 1), not total occurrences. If someone wrote "pizza pizza pizza" in one message it counted as 1 instead of 3. Now uses `SUM()` with a `REPLACE`-based length diff to count actual occurrences per message.
+- Added `getMessageCount(guildId)` to `src/database.js`
+- Added startup logging in `src/index.js`:
+  - `[db] Using: <url> | persistent=true/false` — tells you immediately if Turso is connected or if the bot is using a wiped-on-redeploy local file
+  - `[db] <ServerName>: N messages already stored` — before backfill
+  - `[db] <ServerName>: N messages total after backfill` — after backfill
+
+**How to diagnose low word counts:** Check Railway logs after deploy. If you see `persistent=false`, set `TURSO_URL` and `TURSO_AUTH_TOKEN` in Railway's Variables tab. If you see a low "after backfill" count, the backfill may not be reaching all channels (check bot permissions).
