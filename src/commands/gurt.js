@@ -96,6 +96,8 @@ async function showQuotes(interaction, word, userArg, initialPage) {
   const totalPages  = Math.ceil(quotes.length / MAX_QUOTES_PER_PAGE);
   const currentPage = Math.min(initialPage, totalPages);
 
+  console.log(`[gurt] "${word}" by ${found.username} (${found.userId}): ${quotes.length} quotes, ${totalPages} pages`);
+
   return interaction.editReply({
     embeds: [buildQuotesEmbed(found.username, word, quotes, currentPage)],
     components: totalPages > 1
