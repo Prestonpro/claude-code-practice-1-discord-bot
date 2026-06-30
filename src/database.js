@@ -131,6 +131,14 @@ async function bulkSaveMessages(messages) {
   return inserted;
 }
 
+async function findUserById(guildId, userId) {
+  const result = await db.execute({
+    sql: `SELECT username FROM messages WHERE guild_id = ? AND user_id = ? LIMIT 1`,
+    args: [guildId, userId],
+  });
+  return result.rows[0]?.username ?? null;
+}
+
 async function getMessageCount(guildId) {
   const result = await db.execute({
     sql: `SELECT COUNT(*) AS total FROM messages WHERE guild_id = ?`,
@@ -139,4 +147,4 @@ async function getMessageCount(guildId) {
   return Number(result.rows[0].total);
 }
 
-module.exports = { initSchema, saveMessage, bulkSaveMessages, getWordStats, getUserQuotes, findUserByName, getMessageCount };
+module.exports = { initSchema, saveMessage, bulkSaveMessages, getWordStats, getUserQuotes, findUserByName, findUserById, getMessageCount };
