@@ -37,7 +37,12 @@ for (const file of fs.readdirSync(commandsDir).filter(f => f.endsWith('.js'))) {
 client.on('interactionCreate', async interaction => {
   if (interaction.isButton() && interaction.customId.startsWith('gurt|')) {
     const { handlePagination } = require('./commands/gurt');
-    return handlePagination(interaction);
+    try {
+      await handlePagination(interaction);
+    } catch (err) {
+      console.error('[gurt] handlePagination threw:', err.message);
+    }
+    return;
   }
 
   if (!interaction.isChatInputCommand()) return;
