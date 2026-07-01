@@ -18,9 +18,9 @@ module.exports = {
         .setDescription('The word to look up')
         .setRequired(true)
     )
-    .addStringOption(opt =>
+    .addUserOption(opt =>
       opt.setName('user')
-        .setDescription('Username to quote (omit to see server-wide stats)')
+        .setDescription("@ someone to see their quotes (they won't be notified)")
         .setRequired(false)
     )
     .addIntegerOption(opt =>
@@ -31,7 +31,7 @@ module.exports = {
 
   async execute(interaction) {
     const word    = interaction.options.getString('word').toLowerCase().trim();
-    const userArg = interaction.options.getString('user');
+    const userArg = interaction.options.getUser('user');
     const page    = interaction.options.getInteger('page') ?? 1;
 
     if (word.includes(' ')) {
@@ -47,7 +47,7 @@ module.exports = {
       return showStats(interaction, word);
     }
 
-    return showQuotes(interaction, word, userArg.trim(), page);
+    return showQuotes(interaction, word, userArg.id, userArg.username, page);
   },
 
   handlePagination,
@@ -70,45 +70,37 @@ async function showStats(interaction, word) {
         )
         .join('\n')
     )
-    .setFooter({ text: `Tip: /gurt ${word} <username> to see their quotes` })
+    .setFooter({ text: `Tip: /gurt ${word} @user to see their quotes` })
     .setTimestamp();
 
   return interaction.editReply({ embeds: [embed] });
 }
 
-async function showQuotes(interaction, word, userArg, initialPage) {
-  const found = await db.findUserByName(interaction.guildId, userArg);
-
-  if (!found) {
-    return interaction.editReply(
-      `Couldn't find **${userArg}** in my records. They may not have spoken since the bot joined.`
-    );
-  }
-
-  const quotes = await db.getUserQuotes(interaction.guildId, found.userId, word);
+async function showQuotes(interaction, word, userId, username, initialPage) {
+  const quotes = await db.getUserQuotes(interaction.guildId, userId, word);
 
   if (quotes.length === 0) {
     return interaction.editReply(
-      `**${found.username}** has never said **${word}** (or the bot hasn't seen it).`
+      `**${username}** has never said **${word}** (or the bot hasn't seen it).`
     );
   }
 
   const totalPages  = Math.ceil(quotes.length / MAX_QUOTES_PER_PAGE);
   const currentPage = Math.min(initialPage, totalPages);
 
-  console.log(`[gurt] "${word}" by ${found.username} (${found.userId}): ${quotes.length} quotes, ${totalPages} pages, buttons=${totalPages > 1}`);
+  console.log(`[gurt] "${word}" by ${username} (${userId}): ${quotes.length} quotes, ${totalPages} pages, buttons=${totalPages > 1}`);
 
   let components = [];
   if (totalPages > 1) {
     try {
-      components = [buildPaginationRow(interaction.guildId, found.userId, word, currentPage, totalPages)];
+      components = [buildPaginationRow(interaction.guildId, userId, word, currentPage, totalPages)];
     } catch (err) {
       console.error('[gurt] buildPaginationRow failed:', err.message);
     }
   }
 
   return interaction.editReply({
-    embeds: [buildQuotesEmbed(found.username, word, quotes, currentPage)],
+    embeds: [buildQuotesEmbed(username, word, quotes, currentPage)],
     components,
   });
 }
