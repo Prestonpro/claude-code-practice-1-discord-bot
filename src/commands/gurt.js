@@ -96,18 +96,26 @@ async function showQuotes(interaction, word, userArg, initialPage) {
   const totalPages  = Math.ceil(quotes.length / MAX_QUOTES_PER_PAGE);
   const currentPage = Math.min(initialPage, totalPages);
 
-  console.log(`[gurt] "${word}" by ${found.username} (${found.userId}): ${quotes.length} quotes, ${totalPages} pages`);
+  console.log(`[gurt] "${word}" by ${found.username} (${found.userId}): ${quotes.length} quotes, ${totalPages} pages, buttons=${totalPages > 1}`);
+
+  let components = [];
+  if (totalPages > 1) {
+    try {
+      components = [buildPaginationRow(interaction.guildId, found.userId, word, currentPage, totalPages)];
+    } catch (err) {
+      console.error('[gurt] buildPaginationRow failed:', err.message);
+    }
+  }
 
   return interaction.editReply({
     embeds: [buildQuotesEmbed(found.username, word, quotes, currentPage)],
-    components: totalPages > 1
-      ? [buildPaginationRow(interaction.guildId, found.userId, word, currentPage, totalPages)]
-      : [],
+    components,
   });
 }
 
 // Called from index.js when a button with customId starting with "gurt|" is clicked.
 async function handlePagination(btnInteraction) {
+  console.log(`[gurt] button: ${btnInteraction.customId}`);
   // customId format: gurt|<prev|next>|<guildId>|<userId>|<page>|<word>
   const [, action, guildId, userId, pageStr, ...wordParts] = btnInteraction.customId.split('|');
   const page = parseInt(pageStr, 10);
